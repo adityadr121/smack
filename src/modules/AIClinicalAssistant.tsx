@@ -3,6 +3,8 @@ import { Patient } from '../types';
 import { Bot, Send, Sparkles, User, ShieldAlert, BookOpen, AlertCircle, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
 
+import { api } from '../services/api';
+
 interface AIClinicalAssistantProps {
   selectedPatient: Patient;
 }
@@ -11,7 +13,7 @@ export const AIClinicalAssistant: React.FC<AIClinicalAssistantProps> = ({ select
   const [messages, setMessages] = useState<Array<{ sender: 'ai' | 'user'; text: string; time: string }>>([
     {
       sender: 'ai',
-      text: `Hello! I am your CureLink AI Clinical Copilot. Currently viewing ${selectedPatient.name} (MRN: ${selectedPatient.mrn}, Ward: ${selectedPatient.ward}). How can I assist your clinical workflow today?`,
+      text: `Hello! I am your CureLink AI Clinical Copilot powered by OpenAI GPT-4o. Currently viewing ${selectedPatient.name} (MRN: ${selectedPatient.mrn}, Ward: ${selectedPatient.ward}). How can I assist your clinical workflow today?`,
       time: 'Just now'
     }
   ]);
@@ -25,7 +27,7 @@ export const AIClinicalAssistant: React.FC<AIClinicalAssistantProps> = ({ select
     `Explain clinical significance of Lactate ${selectedPatient.labHistory[selectedPatient.labHistory.length - 1]?.lactate || 4.2} mmol/L`
   ];
 
-  const handleSendMessage = (textToSend?: string) => {
+  const handleSendMessage = async (textToSend?: string) => {
     const text = textToSend || inputText;
     if (!text.trim()) return;
 
@@ -34,19 +36,14 @@ export const AIClinicalAssistant: React.FC<AIClinicalAssistantProps> = ({ select
     setInputText('');
     setIsThinking(true);
 
-    setTimeout(() => {
-      let aiReply = '';
-      if (text.toLowerCase().includes('shap') || text.toLowerCase().includes('drivers')) {
-        aiReply = `For ${selectedPatient.name}, the top SHAP feature attribution driver is Serum Lactate (${selectedPatient.labHistory[selectedPatient.labHistory.length - 1]?.lactate || 4.2} mmol/L), contributing +32% to the sepsis risk score due to systemic hypoperfusion. Followed by MAP (58 mmHg, +26%) and WBC (${selectedPatient.labHistory[selectedPatient.labHistory.length - 1]?.wbc || 19.8}k, +18%).`;
-      } else if (text.toLowerCase().includes('bundle') || text.toLowerCase().includes('care')) {
-        aiReply = `Surviving Sepsis Campaign 3-Hour Bundle Status for ${selectedPatient.name}:\n• Blood Cultures: ${selectedPatient.treatmentBundleStatus.bloodCultureDrawn ? '✓ Completed' : 'Pending'}\n• Broad-Spectrum Antibiotics: ${selectedPatient.treatmentBundleStatus.broadSpectrumAntibioticsGiven ? '✓ Administered' : 'Action Required'}\n• IV Fluids: ${selectedPatient.treatmentBundleStatus.ivFluidsAdministered ? '✓ In Progress' : '30 mL/kg Bolus Recommended'}`;
-      } else {
-        aiReply = `Based on current telemetry and lab parameters for ${selectedPatient.name}, the AI calculated Sepsis Probability is ${selectedPatient.currentPrediction.sepsisProbability}% with an estimated deterioration lead-time window of ${selectedPatient.currentPrediction.deteriorationWindowHours} hours. Recommended next step: Re-assess serum lactate in 2 hours and verify central line access.`;
-      }
-
+    try {
+      const aiReply = await api.askAICopilot(text, selectedPatient);
       setMessages((prev) => [...prev, { sender: 'ai', text: aiReply, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+    } catch (err) {
+      setMessages((prev) => [...prev, { sender: 'ai', text: `CureLink AI Copilot Error: Unable to query decision engine. ${err}`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+    } finally {
       setIsThinking(false);
-    }, 1200);
+    }
   };
 
   return (

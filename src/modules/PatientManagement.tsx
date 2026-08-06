@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { Patient, ClinicalDocument } from '../types';
 import { AddPatientModal } from '../components/patient/AddPatientModal';
+import { KaggleDatasetImportModal } from '../components/patient/KaggleDatasetImportModal';
 import { RiskGauge } from '../components/common/RiskGauge';
 import { AnimatedECG } from '../components/common/AnimatedECG';
 import { 
   Users, 
   UserPlus, 
+  Database,
   Search, 
   Filter, 
   QrCode, 
@@ -45,11 +47,23 @@ export const PatientManagement: React.FC<PatientManagementProps> = ({
   const [filterWard, setFilterWard] = useState('All');
   const [filterRisk, setFilterRisk] = useState('All');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isKaggleModalOpen, setIsKaggleModalOpen] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
 
   const handleAddPatient = (newPatient: Patient) => {
     setPatients((prev) => [newPatient, ...prev]);
     setSelectedPatientState(newPatient);
+  };
+
+  const handleImportKagglePatients = (newPatients: Patient[]) => {
+    setPatients((prev) => {
+      const existingIds = new Set(prev.map((p) => p.id));
+      const filteredNew = newPatients.filter((p) => !existingIds.has(p.id));
+      return [...filteredNew, ...prev];
+    });
+    if (newPatients.length > 0) {
+      setSelectedPatientState(newPatients[0]);
+    }
   };
 
   const filteredPatients = patients.filter((p) => {
@@ -80,6 +94,14 @@ export const PatientManagement: React.FC<PatientManagementProps> = ({
         </div>
 
         <div className="flex items-center gap-3 relative z-10">
+          <button
+            onClick={() => setIsKaggleModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-cyan-300 font-bold text-xs shadow-lg transition focus:ring-2 focus:ring-cyan-400 focus:outline-none"
+          >
+            <Database className="w-4 h-4 text-cyan-400" />
+            <span>Import Kaggle Sepsis Dataset</span>
+          </button>
+
           <button
             onClick={() => setIsAddModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs shadow-lg shadow-cyan-500/20 focus:ring-2 focus:ring-cyan-400 focus:outline-none"
@@ -489,6 +511,13 @@ export const PatientManagement: React.FC<PatientManagementProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Kaggle Sepsis Dataset Import Modal */}
+      <KaggleDatasetImportModal
+        isOpen={isKaggleModalOpen}
+        onClose={() => setIsKaggleModalOpen(false)}
+        onImportPatients={handleImportKagglePatients}
+      />
     </div>
   );
 };

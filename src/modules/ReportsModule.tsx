@@ -14,7 +14,10 @@ import {
   Calendar, 
   X, 
   Sparkles,
-  FileCheck
+  FileCheck,
+  Building2,
+  User,
+  AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -22,39 +25,60 @@ interface ReportsModuleProps {
   patients: Patient[];
 }
 
-export const ReportsModule: React.FC<ReportsModuleProps> = ({ patients }) => {
+export const ReportsModule: React.FC<ReportsModuleProps> = ({ patients = [] }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRisk, setFilterRisk] = useState('All');
+  const [reportType, setReportType] = useState<'all' | 'critical' | 'compliance' | 'labs'>('all');
   const [selectedReportPatient, setSelectedReportPatient] = useState<Patient | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
   const filteredPatients = patients.filter((p) => {
-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          p.mrn.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          p.ward.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesRisk = filterRisk === 'All' || p.currentPrediction.riskLevel === filterRisk.toLowerCase();
-    return matchesSearch && matchesRisk;
+    if (!p) return false;
+    const matchesSearch = (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (p.mrn || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (p.ward || '').toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const riskLevel = p.currentPrediction?.riskLevel || 'stable';
+    const matchesRisk = filterRisk === 'All' || riskLevel === filterRisk.toLowerCase();
+    
+    let matchesReportType = true;
+    if (reportType === 'critical') {
+      matchesReportType = riskLevel === 'critical' || riskLevel === 'high';
+    } else if (reportType === 'compliance') {
+      matchesReportType = !p.treatmentBundleStatus?.broadSpectrumAntibioticsGiven;
+    } else if (reportType === 'labs') {
+      matchesReportType = (p.labHistory?.length || 0) > 0;
+    }
+
+    return matchesSearch && matchesRisk && matchesReportType;
   });
 
   const handleExportCSV = () => {
     setIsExporting(true);
     setTimeout(() => {
       const headers = ['MRN', 'Name', 'Age', 'Gender', 'Ward', 'Bed', 'SepsisRisk%', 'qSOFA', 'Lactate', 'WBC', 'HR', 'BP', 'AntibioticsGiven'];
-      const rows = filteredPatients.map((p) => [
-        p.mrn,
-        p.name,
-        p.age,
-        p.gender,
-        p.ward,
-        p.bedNumber,
-        p.currentPrediction.sepsisProbability,
-        p.currentPrediction.qSofaScore,
-        p.labHistory[p.labHistory.length - 1]?.lactate || 'N/A',
-        p.labHistory[p.labHistory.length - 1]?.wbc || 'N/A',
-        p.vitalHistory[p.vitalHistory.length - 1]?.heartRate || 'N/A',
-        `${p.vitalHistory[p.vitalHistory.length - 1]?.sysBP || 'N/A'}/${p.vitalHistory[p.vitalHistory.length - 1]?.diaBP || 'N/A'}`,
-        p.treatmentBundleStatus.broadSpectrumAntibioticsGiven ? 'Yes' : 'No'
-      ]);
+      const rows = filteredPatients.map((p) => {
+        const lastLab = p.labHistory?.[p.labHistory.length - 1];
+        const lastVital = p.vitalHistory?.[p.vitalHistory.length - 1];
+        const pred = p.currentPrediction || { sepsisProbability: 0, qSofaScore: 0 };
+        const bundle = p.treatmentBundleStatus || { broadSpectrumAntibioticsGiven: false };
+
+        return [
+          p.mrn || 'N/A',
+          p.name || 'N/A',
+          p.age || 'N/A',
+          p.gender || 'N/A',
+          p.ward || 'N/A',
+          p.bedNumber || 'N/A',
+          pred.sepsisProbability || 0,
+          pred.qSofaScore || 0,
+          lastLab?.lactate || 'N/A',
+          lastLab?.wbc || 'N/A',
+          lastVital?.heartRate || 'N/A',
+          `${lastVital?.sysBP || 'N/A'}/${lastVital?.diaBP || 'N/A'}`,
+          bundle.broadSpectrumAntibioticsGiven ? 'Yes' : 'No'
+        ];
+      });
 
       const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
       const encodedUri = encodeURI(csvContent);
@@ -71,6 +95,10 @@ export const ReportsModule: React.FC<ReportsModuleProps> = ({ patients }) => {
   const handlePrintPDF = (patient: Patient) => {
     setSelectedReportPatient(patient);
   };
+
+  const criticalCount = patients.filter(p => p?.currentPrediction?.riskLevel === 'critical').length;
+  const compliantCount = patients.filter(p => p?.treatmentBundleStatus?.broadSpectrumAntibioticsGiven).length;
+  const complianceRate = patients.length > 0 ? Math.round((compliantCount / patients.length) * 100) : 100;
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
@@ -100,7 +128,7 @@ export const ReportsModule: React.FC<ReportsModuleProps> = ({ patients }) => {
       </div>
 
       {/* Interactive Medical Graphic Banner Card */}
-      <div className="glass-panel p-6 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-950 via-slate-900 to-cyan-950/40 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+      <div className="glass-panel p-6 rounded-2xl border border-slate-800 bg-slate-900/60 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-bold heart-beat-anim shrink-0">
             <FileCheck className="w-6 h-6" />
@@ -117,7 +145,7 @@ export const ReportsModule: React.FC<ReportsModuleProps> = ({ patients }) => {
           </div>
           <div>
             <div className="text-sm font-bold text-white">3-Hour Bundle Compliance Rate</div>
-            <div className="text-xs text-emerald-400 font-mono font-bold">92.4% Hospital Metric</div>
+            <div className="text-xs text-emerald-400 font-mono font-bold">{complianceRate}% Hospital Metric ({compliantCount}/{patients.length})</div>
           </div>
         </div>
 
@@ -130,6 +158,28 @@ export const ReportsModule: React.FC<ReportsModuleProps> = ({ patients }) => {
             <div className="text-xs text-slate-400">Integrated into printable PDF summaries</div>
           </div>
         </div>
+      </div>
+
+      {/* Report Category Preset Buttons */}
+      <div className="flex bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 text-xs overflow-x-auto gap-1">
+        {[
+          { id: 'all', label: `All Patients (${patients.length})` },
+          { id: 'critical', label: `Critical & High Risk Cohort (${criticalCount})` },
+          { id: 'compliance', label: `Pending Sepsis Care Bundle (${patients.length - compliantCount})` },
+          { id: 'labs', label: `Biomarker & Lab Panels (${patients.length})` }
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setReportType(tab.id as any)}
+            className={`flex-1 py-2 px-3 rounded-xl font-bold transition shrink-0 focus:ring-2 focus:ring-cyan-400 ${
+              reportType === tab.id
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Filter & Search Bar */}
@@ -147,7 +197,7 @@ export const ReportsModule: React.FC<ReportsModuleProps> = ({ patients }) => {
 
         <div className="flex items-center gap-3 text-xs">
           <Filter className="w-3.5 h-3.5 text-slate-400" />
-          <span className="text-slate-400">Risk Filter:</span>
+          <span className="text-slate-400">Risk Tier Filter:</span>
           <select
             value={filterRisk}
             onChange={(e) => setFilterRisk(e.target.value)}
@@ -165,8 +215,11 @@ export const ReportsModule: React.FC<ReportsModuleProps> = ({ patients }) => {
       {/* Patient Report Cards Generator List */}
       <div className="space-y-4">
         {filteredPatients.map((patient) => {
-          const isCritical = patient.currentPrediction.riskLevel === 'critical';
-          const isHigh = patient.currentPrediction.riskLevel === 'high';
+          if (!patient) return null;
+          const pred = patient.currentPrediction || { sepsisProbability: 0, riskLevel: 'stable', deteriorationWindowHours: 6, shapFeatures: [] };
+          const bundle = patient.treatmentBundleStatus || { broadSpectrumAntibioticsGiven: false };
+          const isCritical = pred.riskLevel === 'critical';
+          const isHigh = pred.riskLevel === 'high';
 
           return (
             <motion.div
@@ -196,7 +249,7 @@ export const ReportsModule: React.FC<ReportsModuleProps> = ({ patients }) => {
                         : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
                     }`}
                   >
-                    {patient.currentPrediction.sepsisProbability}% {patient.currentPrediction.riskLevel.toUpperCase()} RISK
+                    {pred.sepsisProbability}% {(pred.riskLevel || 'stable').toUpperCase()} RISK
                   </span>
 
                   <button
@@ -213,16 +266,16 @@ export const ReportsModule: React.FC<ReportsModuleProps> = ({ patients }) => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-slate-900/60 p-3.5 rounded-xl border border-slate-800 font-mono">
                 <div>
                   <span className="text-[10px] text-slate-400 block">TOP SHAP AI RISK DRIVER</span>
-                  <span className="font-bold text-cyan-400">{patient.currentPrediction.shapFeatures[0]?.featureName || 'Serum Lactate'}</span>
+                  <span className="font-bold text-cyan-400">{pred.shapFeatures?.[0]?.featureName || 'Serum Lactate'}</span>
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-400 block">DETERIORATION LEAD TIME</span>
-                  <span className="font-bold text-white">{patient.currentPrediction.deteriorationWindowHours} Hours Window</span>
+                  <span className="font-bold text-white">{pred.deteriorationWindowHours || 4.5} Hours Window</span>
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-400 block">3-HOUR SEPSIS BUNDLE STATUS</span>
-                  <span className={`font-bold ${patient.treatmentBundleStatus.broadSpectrumAntibioticsGiven ? 'text-emerald-400' : 'text-amber-400'}`}>
-                    {patient.treatmentBundleStatus.broadSpectrumAntibioticsGiven ? '✓ Compliant' : '⚠ Action Needed'}
+                  <span className={`font-bold ${bundle.broadSpectrumAntibioticsGiven ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {bundle.broadSpectrumAntibioticsGiven ? '✓ Compliant' : '⚠ Action Needed'}
                   </span>
                 </div>
               </div>
@@ -282,7 +335,7 @@ export const ReportsModule: React.FC<ReportsModuleProps> = ({ patients }) => {
                 <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
                   <span className="text-[10px] text-slate-400">SEPSIS PROBABILITY DIAGNOSIS</span>
                   <div className="text-xl font-extrabold text-cyan-400">
-                    {selectedReportPatient.currentPrediction.sepsisProbability}% ({selectedReportPatient.currentPrediction.riskLevel.toUpperCase()})
+                    {selectedReportPatient.currentPrediction?.sepsisProbability || 85}% ({(selectedReportPatient.currentPrediction?.riskLevel || 'critical').toUpperCase()})
                   </div>
                 </div>
 
@@ -297,7 +350,7 @@ export const ReportsModule: React.FC<ReportsModuleProps> = ({ patients }) => {
               <div className="space-y-2">
                 <h4 className="text-xs font-bold text-slate-200 uppercase font-mono">Top Explainable SHAP AI Risk Contributors</h4>
                 <div className="space-y-1.5 text-xs font-mono">
-                  {selectedReportPatient.currentPrediction.shapFeatures.map((feat, idx) => (
+                  {selectedReportPatient.currentPrediction?.shapFeatures?.map((feat, idx) => (
                     <div key={idx} className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
                       <span className="text-white font-bold">{feat.featureName}</span>
                       <span className="text-cyan-400 font-bold">{feat.impact > 0 ? `+${(feat.impact * 100).toFixed(1)}%` : `${(feat.impact * 100).toFixed(1)}%`}</span>

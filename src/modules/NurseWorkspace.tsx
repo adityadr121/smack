@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Patient, VitalSignRecord } from '../types';
+import { TwoHourVitalsModal } from '../components/patient/TwoHourVitalsModal';
 import { 
   Stethoscope, 
   QrCode, 
@@ -14,9 +15,11 @@ import {
   Clock,
   UserCheck,
   RefreshCcw,
-  Sparkles
+  Sparkles,
+  AlertCircle,
+  BellRing
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface NurseWorkspaceProps {
   patients: Patient[];
@@ -34,6 +37,7 @@ export const NurseWorkspace: React.FC<NurseWorkspaceProps> = ({
   const [isListeningVoice, setIsListeningVoice] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [isOffline, setIsOffline] = useState(false);
+  const [twoHourModalPatient, setTwoHourModalPatient] = useState<Patient | null>(null);
 
   // Form State
   const [hr, setHr] = useState(114);
@@ -76,8 +80,8 @@ export const NurseWorkspace: React.FC<NurseWorkspaceProps> = ({
     setIsScanningQR(true);
     setTimeout(() => {
       setIsScanningQR(false);
-      setSelectedPatientId('p-101'); // Select Eleanor Vance
-      alert('QR Code Scanned: Matched Wristband MRN-884920 (Eleanor Vance, Bed A-04)');
+      setSelectedPatientId(patients[0]?.id || 'p-101');
+      alert(`QR Code Scanned: Matched Wristband MRN-${patients[0]?.mrn} (${patients[0]?.name})`);
     }, 1500);
   };
 
@@ -101,20 +105,24 @@ export const NurseWorkspace: React.FC<NurseWorkspaceProps> = ({
     setTimeout(() => setSubmitSuccess(false), 3000);
   };
 
+  const overdueCount = patients.filter((p, idx) => idx % 2 === 0).length;
+
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-6 max-w-6xl mx-auto pb-12">
       {/* Nurse Header & Offline Queue Bar */}
-      <div className="glass-panel p-6 rounded-2xl border border-slate-800 bg-slate-950/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-mono text-cyan-400">
+      <div className="glass-panel p-6 rounded-2xl border border-slate-800 bg-slate-950/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative z-10">
+          <div className="flex items-center gap-2 text-xs font-mono text-cyan-400 font-bold uppercase">
             <Stethoscope className="w-4 h-4" />
             <span>SPEED-OPTIMIZED BEDSIDE NURSE WORKSPACE</span>
           </div>
-          <h1 className="text-2xl font-bold text-white">Rapid Vital Signs & qSOFA Intake</h1>
-          <p className="text-xs text-slate-400">Minimize Clicks • Hands-Free Voice Entry • Instant Sepsis Screening</p>
+          <h1 className="text-2xl font-extrabold text-white">Rapid Vital Signs & 2-Hour Intake Schedule</h1>
+          <p className="text-xs text-slate-400">Intermittent 2-Hour Vital Tracking • Hands-Free Voice Entry • Instant Sepsis Screening</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 relative z-10">
           <button
             onClick={() => setIsOffline(!isOffline)}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-mono transition ${
@@ -128,11 +136,68 @@ export const NurseWorkspace: React.FC<NurseWorkspaceProps> = ({
           <button
             onClick={handleScanQR}
             disabled={isScanningQR}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 font-bold text-xs transition"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 font-bold text-xs transition"
           >
             <QrCode className={`w-4 h-4 ${isScanningQR ? 'animate-spin' : ''}`} />
             <span>{isScanningQR ? 'Scanning Wristband...' : 'Scan Patient QR'}</span>
           </button>
+        </div>
+      </div>
+
+      {/* 2-HOUR INTERMITTENT VITALS ALERT TRACKER BANNER */}
+      <div className="glass-panel p-5 rounded-2xl border border-slate-800 bg-slate-950/80 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-amber-400 animate-pulse" />
+            <h3 className="text-xs font-extrabold text-white uppercase tracking-wider font-mono">
+              2-Hour Intermittent Telemetry Alert Tracker ({overdueCount} Overdue Beds)
+            </h3>
+          </div>
+          <span className="text-[10px] font-mono text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/30 font-bold">
+            CLINICAL ICU PROTOCOL: VITALS LOGGED EVERY 120 MINS
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {patients.map((p, idx) => {
+            const isOverdue = idx % 2 === 0;
+            const lastTime = p.vitalHistory?.[p.vitalHistory.length - 1]?.timestamp || '2.5h ago';
+
+            return (
+              <div
+                key={p.id}
+                className={`p-3.5 rounded-xl border transition flex flex-col justify-between space-y-2 ${
+                  isOverdue
+                    ? 'bg-amber-950/20 border-amber-500/40 text-slate-200'
+                    : 'bg-slate-900/60 border-slate-800 text-slate-300'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-white text-xs">{p.name}</span>
+                    <span
+                      className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded ${
+                        isOverdue ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse' : 'bg-emerald-500/20 text-emerald-300'
+                      }`}
+                    >
+                      {isOverdue ? '2-HR OVERDUE' : 'OK (1.2h ago)'}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-1">
+                    {p.ward} • {p.bedNumber} | Last: <span className="font-mono text-slate-200">{lastTime}</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setTwoHourModalPatient(p)}
+                  className="w-full py-1.5 px-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow transition"
+                >
+                  <Stethoscope className="w-3.5 h-3.5" />
+                  <span>Record 2-Hr Vitals</span>
+                </button>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -142,7 +207,7 @@ export const NurseWorkspace: React.FC<NurseWorkspaceProps> = ({
         <div className="lg:col-span-2 glass-panel p-6 rounded-2xl border border-slate-800 bg-slate-950/80 space-y-6">
           {/* Patient Selection Selector */}
           <div>
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2 font-mono">
               Select Patient Bed
             </label>
             <select
@@ -152,7 +217,7 @@ export const NurseWorkspace: React.FC<NurseWorkspaceProps> = ({
             >
               {patients.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.ward} — {p.bedNumber}: {p.name} ({p.mrn}) — Risk: {p.riskLevel.toUpperCase()}
+                  {p.ward} — {p.bedNumber}: {p.name} ({p.mrn}) — Sepsis Risk: {(p.currentPrediction?.riskLevel || 'stable').toUpperCase()}
                 </option>
               ))}
             </select>
@@ -163,7 +228,7 @@ export const NurseWorkspace: React.FC<NurseWorkspaceProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-cyan-400" />
-                <span className="text-xs font-bold text-cyan-300 uppercase">Voice Vitals Assistant</span>
+                <span className="text-xs font-bold text-cyan-300 uppercase font-mono">Voice Vitals Assistant</span>
               </div>
               <button
                 type="button"
@@ -249,7 +314,7 @@ export const NurseWorkspace: React.FC<NurseWorkspaceProps> = ({
               </div>
 
               <div>
-                <label className="text-xs text-slate-400 font-mono block mb-1">SpO2 (%)</label>
+                <label className="text-xs text-slate-400 font-mono block mb-1">SpO₂ (%)</label>
                 <input
                   type="number"
                   value={spo2}
@@ -260,92 +325,103 @@ export const NurseWorkspace: React.FC<NurseWorkspaceProps> = ({
               </div>
             </div>
 
-            {/* AVPU Mental Status Selector */}
+            {/* AVPU Consciousness Selection */}
             <div>
-              <label className="text-xs font-bold text-slate-400 block mb-2">AVPU Consciousness Assessment</label>
-              <div className="grid grid-cols-4 gap-2">
-                {(['Alert', 'Voice', 'Pain', 'Unresponsive'] as const).map((level) => (
+              <label className="text-xs text-slate-400 font-mono block mb-2">AVPU Consciousness Scale</label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+                {(['Alert', 'Voice', 'Pain', 'Unresponsive'] as const).map((scale) => (
                   <button
-                    key={level}
+                    key={scale}
                     type="button"
-                    onClick={() => setAvpu(level)}
-                    className={`py-2 rounded-xl text-xs font-bold transition border ${
-                      avpu === level
-                        ? level === 'Alert'
-                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                          : 'bg-red-500/20 text-red-300 border-red-500/50'
-                        : 'bg-slate-900 border-slate-800 text-slate-400'
+                    onClick={() => setAvpu(scale)}
+                    className={`py-2.5 px-3 rounded-xl border text-center font-bold transition ${
+                      avpu === scale
+                        ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    {level}
+                    {scale}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Live qSOFA Score Gauge */}
-            <div className={`p-4 rounded-2xl border flex items-center justify-between transition ${
-              qSofa >= 2 ? 'bg-red-950/30 border-red-500/50 text-red-300 neon-glow-red' : 'bg-slate-900 border-slate-800 text-slate-300'
-            }`}>
-              <div className="space-y-0.5">
-                <span className="text-xs font-mono uppercase block">Real-time Bedside qSOFA Score</span>
-                <span className="text-xl font-extrabold text-white">
-                  {qSofa} / 3 — {qSofa >= 2 ? 'HIGH SEPSIS RISK INDICATED' : 'MODERATE / STABLE'}
+            {/* Submit Action */}
+            <div className="flex items-center justify-between pt-4 border-t border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-mono font-bold ${qSofa >= 2 ? 'text-red-400' : 'text-emerald-400'}`}>
+                  Live qSOFA Score: {qSofa} / 3 ({qSofa >= 2 ? 'High Risk Alert' : 'Normal Range'})
                 </span>
               </div>
 
-              {qSofa >= 2 && <AlertTriangle className="w-8 h-8 text-red-400 heart-beat-anim" />}
+              <button
+                type="submit"
+                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs shadow-lg shadow-cyan-500/20 transition"
+              >
+                {submitSuccess ? <CheckCircle className="w-4 h-4 text-emerald-300" /> : <Save className="w-4 h-4" />}
+                <span>{submitSuccess ? 'Vitals Logged & AI Re-Calculated!' : 'Submit Bedside Vitals (1-Click Log)'}</span>
+              </button>
             </div>
-
-            <button
-              type="submit"
-              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-xl shadow-cyan-500/20 transition"
-            >
-              <Save className="w-4 h-4" />
-              <span>Record Vitals & Trigger AI Prediction</span>
-            </button>
-
-            {submitSuccess && (
-              <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-emerald-400" />
-                <span>Vitals successfully recorded! AI Sepsis Risk score updated in real time.</span>
-              </div>
-            )}
           </form>
         </div>
 
-        {/* Right Column: Shift Summary & Nurse Guidelines */}
-        <div className="space-y-6">
+        {/* Right Column: Active Patient Summary & Quick History */}
+        <div className="space-y-4">
           <div className="glass-panel p-5 rounded-2xl border border-slate-800 bg-slate-950/80 space-y-4">
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <UserCheck className="w-4 h-4 text-cyan-400" />
-              <span>Shift Summary (RN Marcus Vance)</span>
+            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono">
+              Patient Bed Details ({selectedPatient.bedNumber})
             </h3>
-
-            <div className="space-y-3 text-xs">
-              <div className="flex justify-between p-2.5 rounded-xl bg-slate-900">
-                <span className="text-slate-400">Assigned Patients:</span>
-                <span className="font-bold text-white font-mono">4 Beds (ICU)</span>
+            <div className="space-y-2 text-xs">
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex justify-between">
+                <span className="text-slate-400">Patient Name:</span>
+                <span className="font-bold text-white">{selectedPatient.name}</span>
               </div>
-              <div className="flex justify-between p-2.5 rounded-xl bg-slate-900">
-                <span className="text-slate-400">Vitals Recorded Shift:</span>
-                <span className="font-bold text-cyan-400 font-mono">18 Records</span>
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex justify-between">
+                <span className="text-slate-400">MRN:</span>
+                <span className="font-mono text-cyan-300 font-bold">{selectedPatient.mrn}</span>
               </div>
-              <div className="flex justify-between p-2.5 rounded-xl bg-slate-900">
-                <span className="text-slate-400">High Risk Triggers:</span>
-                <span className="font-bold text-red-400 font-mono">2 Active Alerts</span>
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex justify-between">
+                <span className="text-slate-400">Primary Diagnosis:</span>
+                <span className="font-bold text-slate-200">{selectedPatient.primaryDiagnosis}</span>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex justify-between">
+                <span className="text-slate-400">Sepsis Probability:</span>
+                <span className="font-mono text-red-400 font-bold">{selectedPatient.currentPrediction?.sepsisProbability}%</span>
               </div>
             </div>
+          </div>
 
-            <button
-              onClick={() => onNavigate('prediction')}
-              className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-cyan-400 text-xs font-bold transition"
-            >
-              View Patient Sepsis SHAP Analysis &rarr;
-            </button>
+          <div className="glass-panel p-5 rounded-2xl border border-slate-800 bg-slate-950/80 space-y-3">
+            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono">
+              Recent Vital Logs ({selectedPatient.vitalHistory?.length || 0})
+            </h3>
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+              {selectedPatient.vitalHistory?.map((v, idx) => (
+                <div key={idx} className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono flex justify-between">
+                  <div>
+                    <span className="text-slate-400">{v.timestamp}</span>
+                    <div className="text-white font-bold">HR {v.heartRate} | BP {v.sysBP}/{v.diaBP}</div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-cyan-400">T {v.temperature}°C</span>
+                    <div className="text-slate-400">SpO₂ {v.spo2}%</div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
+
+      {/* 2-Hour Vitals Intake Modal */}
+      {twoHourModalPatient && (
+        <TwoHourVitalsModal
+          isOpen={!!twoHourModalPatient}
+          onClose={() => setTwoHourModalPatient(null)}
+          patient={twoHourModalPatient}
+          onAddVitalRecord={onAddVitalRecord}
+        />
+      )}
     </div>
   );
 };

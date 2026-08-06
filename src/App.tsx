@@ -301,6 +301,7 @@ export function App() {
               alerts={alerts}
               currentRole={currentRole}
               onAcknowledgeAlert={handleAcknowledgeAlert}
+              onNavigate={setActiveModule}
             />
           )}
 

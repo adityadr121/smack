@@ -1,6 +1,8 @@
 import { Patient, WardBed, AlertItem, AuditLog } from '../types';
+import { KAGGLE_SEPSIS_PATIENTS } from './kaggleSepsisDataset';
 
 export const INITIAL_PATIENTS: Patient[] = [
+  ...KAGGLE_SEPSIS_PATIENTS,
   {
     id: 'p-101',
     mrn: 'MRN-884920',
